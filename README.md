@@ -1,6 +1,6 @@
 # ReachInbox Email Scheduler
 
-Phase 1-3 foundation for the ReachInbox email-scheduling assignment.
+Phase 1-4 foundation for the ReachInbox email-scheduling assignment.
 
 ## Structure
 
@@ -23,4 +23,4 @@ npm run dev
 
 For Prisma development migrations, MySQL also provisions a dedicated `reachinbox_shadow` database. Set matching values in the root `.env` and `backend/.env` files before the first `docker compose up`.
 
-Redis is available on the port configured by `REDIS_PORT`. Start the BullMQ test worker separately with `npm run worker` from `backend/`. Configure the `SMTP_*` variables in `backend/.env` with local Ethereal credentials before using the development-only `POST /api/test/queue` endpoint.
+Redis is available on the port configured by `REDIS_PORT`. Start the BullMQ worker separately with `npm run worker` from `backend/`. Configure the `SMTP_*` variables in `backend/.env` with local Ethereal credentials. The persistent scheduling endpoint is `POST /api/emails/schedule`; development-only SMTP checks remain available at `POST /api/test/queue`.

@@ -1,12 +1,9 @@
 import { Queue } from "bullmq";
 import { redisConnection } from "../config/redis.js";
+import type { TestEmailJobData } from "../schemas/test-email-job.schema.js";
 
 export const EMAIL_QUEUE_NAME = "emailQueue";
 export const TEST_EMAIL_JOB_NAME = "email.test";
-
-export type TestEmailJobData = {
-  message: string;
-};
 
 export const emailQueue = new Queue<TestEmailJobData>(EMAIL_QUEUE_NAME, {
   connection: redisConnection,

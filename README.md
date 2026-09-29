@@ -1,17 +1,17 @@
 # ReachInbox Email Scheduler
 
-Phase 1 monorepo for the ReachInbox email-scheduling assignment.
+Phase 1-3 foundation for the ReachInbox email-scheduling assignment.
 
 ## Structure
 
 - `frontend/`: React, TypeScript, and Tailwind application.
 - `backend/`: Express, TypeScript, MySQL, and Prisma API foundation.
-- `docker-compose.yml`: local MySQL service only.
+- `docker-compose.yml`: local MySQL and Redis services.
 
 ## Local setup
 
 ```sh
-docker compose up -d mysql
+docker compose up -d
 cd backend
 copy .env.example .env
 npm install
@@ -23,4 +23,4 @@ npm run dev
 
 For Prisma development migrations, MySQL also provisions a dedicated `reachinbox_shadow` database. Set matching values in the root `.env` and `backend/.env` files before the first `docker compose up`.
 
-Redis is available on the port configured by `REDIS_PORT`. Start the BullMQ test worker separately with `npm run worker` from `backend/`.
+Redis is available on the port configured by `REDIS_PORT`. Start the BullMQ test worker separately with `npm run worker` from `backend/`. Configure the `SMTP_*` variables in `backend/.env` with local Ethereal credentials before using the development-only `POST /api/test/queue` endpoint.

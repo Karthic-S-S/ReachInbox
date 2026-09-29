@@ -6,6 +6,9 @@ const environmentSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   DATABASE_URL: z.string().url(),
   SHADOW_DATABASE_URL: z.string().url(),
+  REDIS_HOST: z.string().min(1).default("localhost"),
+  REDIS_PORT: z.coerce.number().int().min(1).max(65535).default(6380),
+  WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(100).default(5),
 });
 
 export const env = environmentSchema.parse(process.env);

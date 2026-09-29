@@ -1,0 +1,17 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Dependencies and generated output
+node_modules/
+dist/
+.output/
+coverage/
+backend/src/generated/
+
+# Local tooling
+*.log
+.DS_Store
+.idea/
+.vscode/

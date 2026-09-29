@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum SenderStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum EmailStatus {
+  DRAFT
+  SCHEDULED
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model User {
+  id              String           @id @default(uuid()) @db.Char(36)
+  email           String           @unique @db.VarChar(255)
+  name            String?          @db.VarChar(255)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  senders         Sender[]
+  campaigns       Campaign[]
+  emails          Email[]
+  slackConnection SlackConnection?
+}
+
+model Sender {
+  id              String       @id @default(uuid()) @db.Char(36)
+  userId          String       @db.Char(36)
+  email           String       @unique @db.VarChar(255)
+  displayName     String?      @db.VarChar(255)
+  status          SenderStatus @default(ACTIVE)
+  hourlySendLimit Int?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns       Campaign[]
+  emails          Email[]
+
+  @@index([userId, status])
+}
+
+model Campaign {
+  id             String         @id @default(uuid()) @db.Char(36)
+  userId         String         @db.Char(36)
+  senderId       String         @db.Char(36)
+  name           String         @db.VarChar(255)
+  status         CampaignStatus @default(DRAFT)
+  scheduledAt    DateTime?
+  workerJobId    String?        @unique @db.VarChar(255)
+  idempotencyKey String?        @unique @db.VarChar(255)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sender         Sender         @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  emails         Email[]
+
+  @@index([userId, status, scheduledAt])
+  @@index([senderId, status])
+}
+
+model Email {
+  id                String      @id @default(uuid()) @db.Char(36)
+  userId            String      @db.Char(36)
+  campaignId        String      @db.Char(36)
+  senderId          String      @db.Char(36)
+  recipientEmail    String      @db.VarChar(255)
+  subject           String      @db.VarChar(998)
+  htmlBody          String      @db.LongText
+  status            EmailStatus @default(DRAFT)
+  scheduledAt       DateTime?
+  sentAt            DateTime?
+  providerMessageId String?     @unique @db.VarChar(255)
+  workerJobId       String?     @unique @db.VarChar(255)
+  idempotencyKey    String?     @unique @db.VarChar(255)
+  failureReason     String?     @db.Text
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign          Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  sender            Sender      @relation(fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@unique([campaignId, recipientEmail])
+  @@index([userId, status, scheduledAt])
+  @@index([senderId, status, scheduledAt])
+}
+
+model SlackConnection {
+  id                   String   @id @default(uuid()) @db.Char(36)
+  userId               String   @unique @db.Char(36)
+  workspaceId          String   @unique @db.VarChar(255)
+  workspaceName        String?  @db.VarChar(255)
+  encryptedAccessToken String   @db.Text
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

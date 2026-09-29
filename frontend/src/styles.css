@@ -1,0 +1,92 @@
+@import "tailwindcss" source(none);
+@source "../src";
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 3px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 3px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-strong: var(--primary-soft-strong);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle: var(--subtle);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--primary);
+  --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
+  --color-highlight: var(--highlight);
+  --color-attachment: var(--attachment);
+  --color-avatar: var(--avatar);
+  --color-schedule: var(--schedule);
+  --color-schedule-border: var(--schedule-border);
+  --color-schedule-foreground: var(--schedule-foreground);
+  --color-editor: var(--editor);
+  --color-google-blue: var(--google-blue);
+  --shadow-card: var(--shadow-card);
+  --shadow-popover: var(--shadow-popover);
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-logo: "Courier New", monospace;
+}
+
+:root {
+  --radius: 0.5rem;
+  --background: oklch(0.995 0 0);
+  --foreground: oklch(0.2 0.025 255);
+  --card: oklch(1 0 0);
+  --popover: oklch(1 0 0);
+  --primary: oklch(0.66 0.2 148);
+  --primary-hover: oklch(0.58 0.18 148);
+  --primary-foreground: oklch(1 0 0);
+  --primary-soft: oklch(0.95 0.055 153);
+  --primary-soft-strong: oklch(0.91 0.07 153);
+  --muted: oklch(0.965 0.005 210);
+  --muted-foreground: oklch(0.5 0.025 250);
+  --subtle: oklch(0.7 0.015 250);
+  --border: oklch(0.9 0.008 250);
+  --destructive: oklch(0.58 0.22 27);
+  --warning: oklch(0.79 0.18 81);
+  --highlight: oklch(0.98 0.045 91);
+  --attachment: oklch(0.55 0.2 250);
+  --avatar: oklch(0.48 0.08 55);
+  --schedule: oklch(0.96 0.04 71);
+  --schedule-border: oklch(0.84 0.11 65);
+  --schedule-foreground: oklch(0.54 0.19 40);
+  --editor: oklch(0.975 0.003 250);
+  --google-blue: oklch(0.6 0.18 250);
+  --shadow-card: 0 1px 3px oklch(0.2 0.02 255 / 8%);
+  --shadow-popover: 0 8px 24px oklch(0.2 0.02 255 / 14%);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    font-family: var(--font-sans);
+  }
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    letter-spacing: 0;
+  }
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+}

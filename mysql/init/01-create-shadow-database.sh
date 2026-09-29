@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+mysql --protocol=socket -uroot -p"${MYSQL_ROOT_PASSWORD}" <<-SQL
+  CREATE DATABASE IF NOT EXISTS \`${MYSQL_SHADOW_DATABASE}\`;
+  GRANT ALL PRIVILEGES ON \`${MYSQL_SHADOW_DATABASE}\`.* TO '${MYSQL_USER}'@'%';
+  FLUSH PRIVILEGES;
+SQL

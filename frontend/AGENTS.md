@@ -1,0 +1,3 @@
+- Keep all external backend communication behind `src/lib/api.ts` so UI modules never assemble Express endpoint URLs directly.
+- Successful send, schedule, login, upload, and mailbox states must come from the configured Express API.
+- Use file-based TanStack routes for login, mailbox, compose, and message detail so each workflow is directly navigable.

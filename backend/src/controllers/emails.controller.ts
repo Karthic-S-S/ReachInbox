@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
 import { EmailStatus, SenderStatus } from "../generated/prisma/client.js";
 import { prisma } from "../config/prisma.js";
-import { enqueueScheduledEmails } from "../queues/email.queue.js";
+import { enqueueScheduledEmails, getScheduledEmailJobId } from "../queues/email.queue.js";
 import { paginationSchema, scheduleEmailsSchema } from "../schemas/schedule-email.schema.js";
 
 type HttpError = Error & { status: number };
@@ -60,7 +60,7 @@ export async function scheduleEmails(request: Request, response: Response) {
             htmlBody: input.body,
             status: "SCHEDULED",
             scheduledAt: email.scheduledAt,
-            workerJobId: email.id,
+            workerJobId: getScheduledEmailJobId(email.id),
           })),
         },
       },

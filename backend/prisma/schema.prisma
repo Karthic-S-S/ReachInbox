@@ -86,6 +86,7 @@ model Email {
   htmlBody          String      @db.LongText
   status            EmailStatus @default(DRAFT)
   scheduledAt       DateTime?
+  processingStartedAt DateTime?
   sentAt            DateTime?
   providerMessageId String?     @unique @db.VarChar(255)
   workerJobId       String?     @unique @db.VarChar(255)
@@ -100,6 +101,7 @@ model Email {
   @@unique([campaignId, recipientEmail])
   @@index([userId, status, scheduledAt])
   @@index([senderId, status, scheduledAt])
+  @@index([status, processingStartedAt])
 }
 
 model SlackConnection {

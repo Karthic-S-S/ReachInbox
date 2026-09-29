@@ -5,18 +5,25 @@ import { prisma } from "../config/prisma.js";
 import { redisConnection } from "../config/redis.js";
 import {
   EMAIL_QUEUE_NAME,
+  SCHEDULED_EMAIL_RECOVERY_JOB_NAME,
   SCHEDULED_EMAIL_JOB_NAME,
   TEST_EMAIL_JOB_NAME,
+  enqueueProcessingRecovery,
+  enqueueScheduledEmails,
   emailQueue,
   type EmailQueueJobData,
 } from "../queues/email.queue.js";
 import { scheduledEmailJobSchema, type ScheduledEmailJobData } from "../schemas/scheduled-email-job.schema.js";
+import {
+  scheduledEmailRecoveryJobSchema,
+  type ScheduledEmailRecoveryJobData,
+} from "../schemas/scheduled-email-recovery-job.schema.js";
 import { testEmailJobSchema, type TestEmailJobData } from "../schemas/test-email-job.schema.js";
 import { sendEmail, type EmailDeliveryResult } from "../services/email.service.js";
 
 type ScheduledEmailJobResult = {
   emailId: string;
-  status: "SENT" | "SKIPPED";
+  status: "SENT" | "SKIPPED" | "RECOVERED" | "ACTIVE";
   messageId?: string;
   previewUrl?: string;
 };
@@ -35,7 +42,29 @@ async function processTestEmail(data: TestEmailJobData): Promise<EmailDeliveryRe
   return delivery;
 }
 
-async function processScheduledEmail(data: ScheduledEmailJobData): Promise<ScheduledEmailJobResult> {
+function sanitizeFailureReason(error: unknown) {
+  const message = error instanceof Error ? error.message : "Unknown email delivery failure.";
+  return message.replace(/(password|pass|auth)\s*[:=]\s*\S+/gi, "$1=[redacted]").slice(0, 4_000);
+}
+
+async function persistAttemptFailure(emailId: string, attemptsMade: number, attempts: number, error: unknown) {
+  const isFinalAttempt = attemptsMade + 1 >= attempts;
+
+  await prisma.email.updateMany({
+    where: { id: emailId, status: EmailStatus.PROCESSING },
+    data: {
+      status: isFinalAttempt ? EmailStatus.FAILED : EmailStatus.SCHEDULED,
+      processingStartedAt: null,
+      failureReason: sanitizeFailureReason(error),
+    },
+  });
+}
+
+async function processScheduledEmail(
+  data: ScheduledEmailJobData,
+  attemptsMade: number,
+  attempts: number,
+): Promise<ScheduledEmailJobResult> {
   const email = await prisma.email.findUnique({ where: { id: data.emailId } });
   if (!email) {
     throw new Error(`Scheduled email ${data.emailId} was not found.`);
@@ -45,12 +74,20 @@ async function processScheduledEmail(data: ScheduledEmailJobData): Promise<Sched
     return { emailId: email.id, status: "SKIPPED" };
   }
 
+  const processingStartedAt = new Date();
   const claim = await prisma.email.updateMany({
     where: { id: email.id, status: EmailStatus.SCHEDULED },
-    data: { status: EmailStatus.PROCESSING, failureReason: null },
+    data: { status: EmailStatus.PROCESSING, processingStartedAt, failureReason: null },
   });
   if (claim.count !== 1) {
     return { emailId: email.id, status: "SKIPPED" };
+  }
+
+  try {
+    await enqueueProcessingRecovery(email.id, processingStartedAt);
+  } catch (error) {
+    await persistAttemptFailure(email.id, attemptsMade, attempts, error);
+    throw error;
   }
 
   let delivery: EmailDeliveryResult;
@@ -61,11 +98,7 @@ async function processScheduledEmail(data: ScheduledEmailJobData): Promise<Sched
       text: email.htmlBody,
     });
   } catch (error) {
-    const failureReason = error instanceof Error ? error.message.slice(0, 4_000) : "Unknown SMTP delivery failure.";
-    await prisma.email.updateMany({
-      where: { id: email.id, status: EmailStatus.PROCESSING },
-      data: { status: EmailStatus.FAILED, failureReason },
-    });
+    await persistAttemptFailure(email.id, attemptsMade, attempts, error);
     throw error;
   }
 
@@ -74,6 +107,7 @@ async function processScheduledEmail(data: ScheduledEmailJobData): Promise<Sched
     data: {
       status: EmailStatus.SENT,
       sentAt: new Date(),
+      processingStartedAt: null,
       providerMessageId: delivery.messageId,
       failureReason: null,
     },
@@ -88,6 +122,53 @@ async function processScheduledEmail(data: ScheduledEmailJobData): Promise<Sched
   return { emailId: email.id, status: "SENT", messageId: delivery.messageId, previewUrl: delivery.previewUrl };
 }
 
+async function processScheduledEmailRecovery(data: ScheduledEmailRecoveryJobData): Promise<ScheduledEmailJobResult> {
+  const expectedProcessingStartedAt = new Date(data.processingStartedAt);
+  const email = await prisma.email.findUnique({ where: { id: data.emailId } });
+  if (!email || email.status !== EmailStatus.PROCESSING || !email.processingStartedAt) {
+    return { emailId: data.emailId, status: "SKIPPED" };
+  }
+
+  if (email.processingStartedAt.getTime() !== expectedProcessingStartedAt.getTime()) {
+    return { emailId: email.id, status: "SKIPPED" };
+  }
+
+  if (Date.now() - email.processingStartedAt.getTime() < env.PROCESSING_TIMEOUT_MS) {
+    return { emailId: email.id, status: "SKIPPED" };
+  }
+
+  const originalJob = email.workerJobId ? await emailQueue.getJob(email.workerJobId) : undefined;
+  if (originalJob && (await originalJob.getState()) === "active") {
+    await enqueueProcessingRecovery(email.id, expectedProcessingStartedAt, data.checkNumber + 1);
+    return { emailId: email.id, status: "ACTIVE" };
+  }
+
+  const recovered = await prisma.email.updateMany({
+    where: {
+      id: email.id,
+      status: EmailStatus.PROCESSING,
+      processingStartedAt: expectedProcessingStartedAt,
+    },
+    data: {
+      status: EmailStatus.SCHEDULED,
+      processingStartedAt: null,
+      failureReason: "Processing lease expired before delivery was recorded.",
+    },
+  });
+  if (recovered.count !== 1) {
+    return { emailId: email.id, status: "SKIPPED" };
+  }
+
+  if (originalJob) {
+    const state = await originalJob.getState();
+    if (state === "completed" || state === "failed") await originalJob.remove();
+  }
+
+  await enqueueScheduledEmails([{ id: email.id, scheduledAt: email.scheduledAt ?? new Date() }]);
+  console.warn({ event: "email.scheduled.recovered", emailId: email.id });
+  return { emailId: email.id, status: "RECOVERED" };
+}
+
 const worker = new Worker<EmailQueueJobData, EmailJobResult>(
   EMAIL_QUEUE_NAME,
   async (job) => {
@@ -100,7 +181,13 @@ const worker = new Worker<EmailQueueJobData, EmailJobResult>(
     if (job.name === SCHEDULED_EMAIL_JOB_NAME) {
       const result = scheduledEmailJobSchema.safeParse(job.data);
       if (!result.success) throw new Error("The queued scheduled email payload is invalid.");
-      return processScheduledEmail(result.data);
+      return processScheduledEmail(result.data, job.attemptsMade, job.opts.attempts ?? 1);
+    }
+
+    if (job.name === SCHEDULED_EMAIL_RECOVERY_JOB_NAME) {
+      const result = scheduledEmailRecoveryJobSchema.safeParse(job.data);
+      if (!result.success) throw new Error("The queued scheduled email recovery payload is invalid.");
+      return processScheduledEmailRecovery(result.data);
     }
 
     throw new Error(`Unsupported email job type: ${job.name}`);
@@ -128,7 +215,11 @@ worker.on("error", (error) => {
   console.error({ event: "worker.error", queue: EMAIL_QUEUE_NAME, error });
 });
 
+let shuttingDown = false;
+
 async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.info({ event: "worker.shutdown", signal });
   await worker.close();
   await emailQueue.close();

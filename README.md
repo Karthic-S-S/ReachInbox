@@ -23,11 +23,11 @@ npm run dev
 
 For Prisma development migrations, MySQL also provisions a dedicated `reachinbox_shadow` database. Set matching values in the root `.env` and `backend/.env` files before the first `docker compose up`.
 
-Redis is available on the port configured by `REDIS_PORT`. Start the BullMQ worker separately with `npm run worker` from `backend/`. Configure the `SMTP_*` variables in `backend/.env` with local Ethereal credentials. The persistent scheduling endpoint is `POST /api/emails/schedule`; development-only SMTP checks remain available at `POST /api/test/queue`.
+Redis is available on the port configured by `REDIS_PORT`. Start the BullMQ worker separately with `npm run worker` from `backend/`. Configure the `SMTP_*` variables in `backend/.env` with local Ethereal credentials. Ethereal is a test SMTP service; successful messages are inspected through the preview URL logged by the worker. The persistent scheduling endpoint is `POST /api/emails/schedule`; development-only SMTP checks remain available at `POST /api/test/queue`.
 
 Scheduled delivery uses deterministic BullMQ job IDs and a database claim to prevent obvious duplicate sends. This is not an exactly-once SMTP guarantee: a worker can still crash after SMTP accepts a message but before MySQL records it as sent.
 
-Before SMTP, every worker makes a shared Redis throttling reservation. `MIN_DELAY_BETWEEN_EMAILS_MS` and `MAX_EMAILS_PER_HOUR` control the global delivery cadence and hourly capacity; a throttled email remains scheduled and its existing BullMQ job is delayed rather than dropped or failed.
+Before SMTP, every worker makes a shared Redis throttling reservation. `MIN_DELAY_BETWEEN_EMAILS_MS` and `MAX_EMAILS_PER_HOUR` control the global delivery cadence and hourly capacity; a selected sender can additionally have a lower `hourlySendLimit`, configured in Compose. Both caps are enforced atomically by Redis; a throttled email remains scheduled and its existing BullMQ job is delayed rather than dropped or failed.
 
 MySQL remains the source of truth for scheduling and delivery. Elasticsearch is a rebuildable search index exposed through `GET /api/emails/search`.
 
@@ -46,6 +46,8 @@ Phase 9 uses the Google OAuth 2.0 authorization-code flow. It verifies Google's 
 3. Add the exact redirect URI in `GOOGLE_CALLBACK_URL`, for example `http://localhost:3000/api/auth/google/callback`. It must match the backend port exactly.
 4. Add the frontend and backend localhost URLs to the authorized JavaScript origins when Google requests them, using the exact values used for `FRONTEND_URL` and the API origin.
 5. Copy `backend/.env.example` to `backend/.env` and set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`, `FRONTEND_URL`, and a random `AUTH_SESSION_SECRET` (at least 32 characters). Never commit this file or credentials.
+
+For local development, the frontend runs at `http://localhost:3001` and the API at `http://localhost:3000`. Keep `FRONTEND_URL=http://localhost:3001` and set Google’s authorized redirect URI to `http://localhost:3000/api/auth/google/callback`. The backend redirects a completed Google sign-in directly to `http://localhost:3001/mail`; frontend API calls use `VITE_API_BASE_URL` (defaulting to `http://localhost:3000` in development). Start the frontend separately with `cd frontend`, `npm install`, and `npm run dev`.
 
 `AUTH_ENABLED=true` requires all Google and session settings and fails startup with a clear configuration error if any are missing. Set `AUTH_ENABLED=false` only for intentionally disabled local-auth development; protected APIs will still reject requests. In production, cookies are marked `Secure`; HTTPS is therefore required.
 

@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui-button";
 
@@ -23,6 +24,13 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    void api
+      .currentUser()
+      .then(() => navigate({ to: "/mail" }))
+      .catch(() => undefined);
+  }, [navigate]);
   return (
     <main className="grid min-h-screen place-items-center bg-background px-5 py-10">
       <section className="w-full max-w-[530px] rounded-lg border border-border bg-card px-7 py-10 shadow-card sm:px-16 sm:py-14">
@@ -40,8 +48,34 @@ function LoginPage() {
         >
           <span className="font-bold text-google-blue">G</span> Login with Google
         </Button>
-        <p className="text-center text-sm text-subtle">
-          Sign in with your Google account to manage your email schedule.
+        <div className="mb-6 flex items-center gap-5 text-sm text-subtle">
+          <span className="h-px flex-1 bg-border" />
+          <span>or sign up through email</span>
+          <span className="h-px flex-1 bg-border" />
+        </div>
+        <div className="space-y-3">
+          <input
+            disabled
+            type="email"
+            placeholder="Email ID"
+            className="h-15 w-full rounded-md bg-muted px-5 text-muted-foreground outline-none disabled:cursor-not-allowed"
+          />
+          <input
+            disabled
+            type="password"
+            placeholder="Password"
+            className="h-15 w-full rounded-md bg-muted px-5 text-muted-foreground outline-none disabled:cursor-not-allowed"
+          />
+        </div>
+        <Button
+          disabled
+          className="mt-7 w-full"
+          title="Email/password authentication is not configured"
+        >
+          Login
+        </Button>
+        <p className="mt-3 text-center text-xs text-subtle">
+          Email/password login is not available. Use Google to sign in.
         </p>
       </section>
     </main>

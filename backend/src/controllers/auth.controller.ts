@@ -18,7 +18,7 @@ export async function completeGoogleLogin(request: Request, response: Response) 
   try {
     const user = await findOrCreateGoogleUser(code);
     await setSession(response, user.id);
-    response.redirect(env.FRONTEND_URL);
+    response.redirect(new URL("/mail", env.FRONTEND_URL).toString());
   } catch {
     response.status(401).json({ error: { code: "GOOGLE_AUTH_FAILED", message: "Google sign-in could not be completed." } });
   }

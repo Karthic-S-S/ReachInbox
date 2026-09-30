@@ -33,7 +33,7 @@ Database claims and deterministic jobs prevent duplicate processing when the dat
 
 ## Shared throttling
 
-`MIN_DELAY_BETWEEN_EMAILS_MS` defaults to `2000`, and `MAX_EMAILS_PER_HOUR` defaults to `200`. Before SMTP, every worker uses one Redis Lua script to atomically check the fixed hourly window and the last reserved send timestamp, then reserve capacity only when both permit it. The Redis keys are shared by all workers and instances, so concurrent workers cannot independently exceed the configured capacity.
+`MIN_DELAY_BETWEEN_EMAILS_MS` defaults to `2000`, and `MAX_EMAILS_PER_HOUR` defaults to `200`. Before SMTP, every worker uses one Redis Lua script to atomically check the fixed hourly window and the last reserved send timestamp, then reserve capacity only when both permit it. The Redis keys are shared by all workers and instances, so concurrent workers cannot independently exceed the configured capacity. A sender can optionally set a lower `hourlySendLimit`; it is enforced in the same atomic reservation alongside the global cap, never in the browser.
 
 When capacity is unavailable, the worker does not call SMTP or consume a BullMQ retry attempt. It conditionally restores its database claim from `PROCESSING` to `SCHEDULED`, updates `scheduledAt` to the next eligible timestamp, and moves the same deterministic BullMQ job back to delayed. This preserves the record and keeps it retryable. SMTP failures remain Phase 5 failures and use the normal retry policy; the rate-limit reservation is intentionally not released after an SMTP error because transport errors can be ambiguous about whether the provider accepted the message.
 

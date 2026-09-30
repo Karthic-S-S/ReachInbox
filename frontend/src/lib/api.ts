@@ -1,4 +1,5 @@
 export type MailboxKind = "scheduled" | "sent";
+export type EmailStatus = "DRAFT" | "SCHEDULED" | "PROCESSING" | "SENT" | "FAILED" | "CANCELLED";
 
 export interface UserAccount {
   id: string;
@@ -10,49 +11,76 @@ export interface SlackStatus {
   connected: boolean;
   workspace?: { id: string; name: string | null };
 }
-export interface MailSummary {
+export interface Sender {
   id: string;
-  recipientName: string;
+  email: string;
+  displayName: string | null;
+  status: "ACTIVE" | "DISABLED";
+  hourlySendLimit: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface Email {
+  id: string;
   recipientEmail: string;
   subject: string;
-  preview: string;
-  status: MailboxKind;
-  scheduledAt?: string;
-  sentAt?: string;
-  starred: boolean;
+  status: EmailStatus;
+  scheduledAt: string | null;
+  sentAt: string | null;
+  campaignId: string;
+  senderId: string;
 }
-export interface Attachment {
-  id: string;
-  name: string;
-  size: number;
-  contentType: string;
-  url: string;
-}
-export interface MailMessage extends MailSummary {
-  senderName: string;
-  senderEmail: string;
-  html: string;
-  attachments: Attachment[];
+export interface EmailDetail extends Email {
+  htmlBody: string;
+  failureReason: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 export interface MailboxResponse {
-  items: MailSummary[];
+  page: number;
+  limit: number;
   total: number;
+  emails: Email[];
 }
-export interface ComposePayload {
+export interface SearchResult {
+  data: Email[];
+  pagination: { page: number; limit: number; total: number };
+}
+export interface RecipientUploadResult {
+  recipients: string[];
+  count: number;
+  invalid: string[];
+}
+export interface ScheduleEmailsPayload {
+  senderId: string;
   recipients: string[];
   subject: string;
-  html: string;
-  delaySeconds: number;
-  hourlyLimit: number;
-  attachmentIds: string[];
-  scheduledAt?: string;
+  body: string;
+  startTime: string;
+  delayBetweenEmailsMs: number;
+}
+export interface UpdateSenderPayload {
+  hourlySendLimit?: number | null;
+}
+export interface ScheduleEmailsResponse {
+  campaignId: string;
+  scheduledCount: number;
+  emails: Array<{ id: string; recipient: string; scheduledAt: string }>;
+}
+export interface ApiErrorBody {
+  error: { code: string; message: string };
 }
 
-const API_BASE_URL = (import.meta.env["VITE_API_BASE_URL"] ?? "").replace(/\/$/, "");
+// TanStack Start's Nitro handler owns unmatched paths during local development,
+// so the API must use the backend origin rather than rely on Vite's dev proxy.
+const API_BASE_URL = (
+  import.meta.env["VITE_API_BASE_URL"] ?? (import.meta.env.DEV ? "http://localhost:3000" : "")
+).replace(/\/$/, "");
 
 export class ApiError extends Error {
   constructor(
     public status: number,
+    public code: string,
     message: string,
   ) {
     super(message);
@@ -69,8 +97,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: "include",
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => undefined)) as { message?: string } | undefined;
-    throw new ApiError(response.status, body?.message ?? "The request could not be completed.");
+    const body = (await response.json().catch(() => undefined)) as ApiErrorBody | undefined;
+    throw new ApiError(
+      response.status,
+      body?.error.code ?? "REQUEST_FAILED",
+      body?.error.message ?? "The request could not be completed.",
+    );
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
@@ -83,22 +115,33 @@ export const api = {
   slackConnectUrl: () => `${API_BASE_URL}/api/slack/connect`,
   slackStatus: () => request<SlackStatus>("/api/slack/status"),
   disconnectSlack: () => request<void>("/api/slack/disconnect", { method: "POST" }),
-  listMail: (mailbox: MailboxKind, signal?: AbortSignal) =>
-    request<MailboxResponse>(`/api/mail?mailbox=${mailbox}`, signal ? { signal } : undefined),
-  getMail: (id: string, signal?: AbortSignal) =>
-    request<MailMessage>(`/api/mail/${encodeURIComponent(id)}`, signal ? { signal } : undefined),
-  uploadAttachment: (file: File) => {
-    const body = new FormData();
-    body.append("file", file);
-    return request<Attachment>("/api/attachments", { method: "POST", body });
-  },
+  listEmails: (mailbox: MailboxKind, signal?: AbortSignal) =>
+    request<MailboxResponse>(`/api/emails/${mailbox}`, signal ? { signal } : undefined),
+  searchEmails: (query: string, status: EmailStatus, signal?: AbortSignal) =>
+    request<SearchResult>(
+      `/api/emails/search?${new URLSearchParams({ q: query, status, page: "1", limit: "20" })}`,
+      signal ? { signal } : undefined,
+    ),
+  getEmail: (id: string, signal?: AbortSignal) =>
+    request<{ email: EmailDetail }>(
+      `/api/emails/${encodeURIComponent(id)}`,
+      signal ? { signal } : undefined,
+    ),
+  listSenders: (signal?: AbortSignal) =>
+    request<{ senders: Sender[] }>("/api/senders", signal ? { signal } : undefined),
+  updateSender: (id: string, payload: UpdateSenderPayload) =>
+    request<{ sender: Sender }>(`/api/senders/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   uploadRecipients: (file: File) => {
     const body = new FormData();
     body.append("file", file);
-    return request<{ recipients: string[] }>("/api/recipients/import", { method: "POST", body });
+    return request<RecipientUploadResult>("/api/uploads/recipients", { method: "POST", body });
   },
-  sendMail: (payload: ComposePayload) =>
-    request<MailMessage>("/api/mail/send", { method: "POST", body: JSON.stringify(payload) }),
-  scheduleMail: (payload: ComposePayload) =>
-    request<MailMessage>("/api/mail/schedule", { method: "POST", body: JSON.stringify(payload) }),
+  scheduleEmails: (payload: ScheduleEmailsPayload) =>
+    request<ScheduleEmailsResponse>("/api/emails/schedule", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };

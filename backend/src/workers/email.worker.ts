@@ -86,7 +86,10 @@ async function processScheduledEmail(
   attemptsMade: number,
   attempts: number,
 ): Promise<ScheduledEmailJobResult> {
-  const email = await prisma.email.findUnique({ where: { id: data.emailId } });
+  const email = await prisma.email.findUnique({
+    where: { id: data.emailId },
+    include: { sender: { select: { hourlySendLimit: true } } },
+  });
   if (!email) {
     throw new Error(`Scheduled email ${data.emailId} was not found.`);
   }
@@ -114,7 +117,10 @@ async function processScheduledEmail(
 
   let rateLimitDecision;
   try {
-    rateLimitDecision = await reserveEmailSendSlot();
+    rateLimitDecision = await reserveEmailSendSlot({
+      senderId: email.senderId,
+      senderHourlyLimit: email.sender.hourlySendLimit,
+    });
   } catch (error) {
     await persistAttemptFailure(email.id, attemptsMade, attempts, error);
     throw error;
@@ -126,7 +132,7 @@ async function processScheduledEmail(
       await notifyRateLimitHit({
         userId: email.userId,
         senderId: email.senderId,
-        hourlyLimit: env.MAX_EMAILS_PER_HOUR,
+        hourlyLimit: rateLimitDecision.hourlyLimit ?? env.MAX_EMAILS_PER_HOUR,
         nextEligibleAt: rateLimitDecision.nextEligibleAt,
       });
     }

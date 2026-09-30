@@ -25,7 +25,15 @@ export function MailShell({
     void api
       .slackStatus()
       .then(setSlack)
-      .catch(() => setSlack(null));
+      .catch((error) => {
+        setSlack(null);
+        setSlackError(error instanceof Error ? error.message : "Slack status could not be loaded.");
+      });
+  }, []);
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get("slack");
+    if (result === "connected") setSlackError("Slack connected successfully.");
+    if (result === "error") setSlackError("Slack connection could not be completed.");
   }, []);
   async function logout() {
     await api.logout().catch(() => undefined);

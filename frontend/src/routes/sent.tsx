@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { MailList } from "@/components/mail-list";
+import { RequireAuth } from "@/components/require-auth";
 export const Route = createFileRoute("/sent")({
   head: () => ({
     meta: [
@@ -11,5 +12,9 @@ export const Route = createFileRoute("/sent")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-  component: () => <MailList mailbox="sent" />,
+  component: () => (
+    <RequireAuth>
+      <MailList mailbox="sent" />
+    </RequireAuth>
+  ),
 });

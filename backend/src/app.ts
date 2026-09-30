@@ -7,7 +7,9 @@ import { emailsRouter } from "./routes/emails.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { healthRouter } from "./routes/health.routes.js";
 import { slackRouter } from "./routes/slack.routes.js";
+import { sendersRouter } from "./routes/senders.routes.js";
 import { testRouter } from "./routes/test.routes.js";
+import { uploadsRouter } from "./routes/uploads.routes.js";
 
 export const app = express();
 app.disable("x-powered-by");
@@ -17,6 +19,8 @@ app.use("/api", healthRouter);
 if (env.AUTH_ENABLED) app.use("/api", authRouter);
 if (env.AUTH_ENABLED) app.use("/api", slackRouter);
 app.use("/api", emailsRouter);
+app.use("/api", sendersRouter);
+app.use("/api", uploadsRouter);
 app.use("/api/test", testRouter);
 
 if (env.BULL_BOARD_ENABLED) {

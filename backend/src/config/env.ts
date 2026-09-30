@@ -22,6 +22,18 @@ const environmentSchema = z.object({
   SMTP_USER: z.string().min(1),
   SMTP_PASSWORD: z.string().min(1),
   SMTP_FROM: z.string().min(1),
+  FRONTEND_URL: z.string().url().default("http://localhost:3001"),
+  AUTH_ENABLED: z.stringbool().default(true),
+  AUTH_COOKIE_NAME: z.string().regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/).default("reachinbox_session"),
+  AUTH_SESSION_SECRET: z.string().min(32).optional(),
+  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_CALLBACK_URL: z.string().url().optional(),
+}).superRefine((value, context) => {
+  if (!value.AUTH_ENABLED) return;
+  for (const key of ["AUTH_SESSION_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_CALLBACK_URL"] as const) {
+    if (!value[key]) context.addIssue({ code: "custom", path: [key], message: `${key} is required when AUTH_ENABLED=true.` });
+  }
 });
 
 export const env = environmentSchema.parse(process.env);

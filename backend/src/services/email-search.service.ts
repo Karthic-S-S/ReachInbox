@@ -8,6 +8,7 @@ const emailIndex = env.ELASTICSEARCH_INDEX;
 
 export type EmailSearchDocument = {
   id: string;
+  userId: string;
   campaignId: string;
   senderId: string;
   recipient: string;
@@ -32,6 +33,7 @@ export type EmailSearchInput = {
 function toSearchDocument(email: Email): EmailSearchDocument {
   return {
     id: email.id,
+    userId: email.userId,
     campaignId: email.campaignId,
     senderId: email.senderId,
     recipient: email.recipientEmail,
@@ -54,6 +56,7 @@ export async function initializeEmailSearchIndex() {
       dynamic: "strict",
       properties: {
         id: { type: "keyword" },
+        userId: { type: "keyword" },
         campaignId: { type: "keyword" },
         senderId: { type: "keyword" },
         recipient: { type: "text", fields: { keyword: { type: "keyword" } } },
@@ -86,8 +89,9 @@ export async function syncEmailSearchDocument(emailId: string) {
   }
 }
 
-export async function searchEmails(input: EmailSearchInput) {
+export async function searchEmails(input: EmailSearchInput, userId: string) {
   const filters: estypes.QueryDslQueryContainer[] = [
+    { term: { userId } },
     ...(input.status ? [{ term: { status: input.status } }] : []),
     ...(input.senderId ? [{ term: { senderId: input.senderId } }] : []),
     ...(input.campaignId ? [{ term: { campaignId: input.campaignId } }] : []),

@@ -2,13 +2,9 @@ export type MailboxKind = "scheduled" | "sent";
 
 export interface UserAccount {
   id: string;
-  name: string;
+  name: string | null;
   email: string;
-  avatarUrl?: string;
-}
-export interface AuthSession {
-  token: string;
-  user: UserAccount;
+  avatar: string | null;
 }
 export interface MailSummary {
   id: string;
@@ -49,7 +45,6 @@ export interface ComposePayload {
 }
 
 const API_BASE_URL = (import.meta.env["VITE_API_BASE_URL"] ?? "").replace(/\/$/, "");
-let accessToken: string | undefined;
 
 export class ApiError extends Error {
   constructor(
@@ -61,15 +56,14 @@ export class ApiError extends Error {
   }
 }
 
-export function setAccessToken(token?: string) {
-  accessToken = token;
-}
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (!(init?.body instanceof FormData)) headers.set("Content-Type", "application/json");
-  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers,
+    credentials: "include",
+  });
   if (!response.ok) {
     const body = (await response.json().catch(() => undefined)) as { message?: string } | undefined;
     throw new ApiError(response.status, body?.message ?? "The request could not be completed.");
@@ -79,12 +73,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  login: (email: string, password: string) =>
-    request<AuthSession>("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }),
   googleLoginUrl: () => `${API_BASE_URL}/api/auth/google`,
+  currentUser: () => request<{ user: UserAccount }>("/api/auth/me"),
+  logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   listMail: (mailbox: MailboxKind, signal?: AbortSignal) =>
     request<MailboxResponse>(`/api/mail?mailbox=${mailbox}`, signal ? { signal } : undefined),
   getMail: (id: string, signal?: AbortSignal) =>

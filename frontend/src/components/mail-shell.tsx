@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, Clock3, Menu, PenLine, Send } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/ui-button";
+import { api, type UserAccount } from "@/lib/api";
 
 export function MailShell({
   children,
@@ -13,6 +14,17 @@ export function MailShell({
   total?: number | undefined;
 }) {
   const [open, setOpen] = useState(false);
+  const [user, setUser] = useState<UserAccount | null>(null);
+  useEffect(() => {
+    void api
+      .currentUser()
+      .then(({ user: currentUser }) => setUser(currentUser))
+      .catch(() => setUser(null));
+  }, []);
+  async function logout() {
+    await api.logout().catch(() => undefined);
+    window.location.assign("/login");
+  }
   return (
     <div className="min-h-screen bg-background text-foreground lg:grid lg:grid-cols-[286px_minmax(0,1fr)]">
       <header className="flex h-16 items-center justify-between border-b border-border px-4 lg:hidden">
@@ -38,15 +50,29 @@ export function MailShell({
           className="mb-3 flex w-full items-center gap-3 rounded-md bg-muted px-3 py-2.5 text-left"
           type="button"
         >
-          <span className="grid size-10 place-items-center rounded-full bg-avatar text-sm font-semibold text-primary-foreground">
-            RI
-          </span>
+          {user?.avatar ? (
+            <img
+              src={user.avatar}
+              alt=""
+              className="size-10 rounded-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <span className="grid size-10 place-items-center rounded-full bg-avatar text-sm font-semibold text-primary-foreground">
+              {user?.name?.slice(0, 1).toUpperCase() ?? "RI"}
+            </span>
+          )}
           <span className="min-w-0 flex-1">
-            <span className="block font-medium">Connected account</span>
-            <span className="block truncate text-xs text-muted-foreground">Email account</span>
+            <span className="block font-medium">{user?.name ?? "Connected account"}</span>
+            <span className="block truncate text-xs text-muted-foreground">
+              {user?.email ?? "Loading account…"}
+            </span>
           </span>
           <ChevronDown className="size-4 text-muted-foreground" />
         </button>
+        <Button variant="ghost" className="mb-3 w-full" onClick={() => void logout()}>
+          Log out
+        </Button>
         <Button variant="outline" className="mb-7 w-full" onClick={() => setOpen(false)}>
           <Link to="/compose" className="flex w-full items-center justify-center gap-2">
             <PenLine className="size-4 lg:hidden" />

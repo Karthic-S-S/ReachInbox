@@ -16,6 +16,7 @@ function requestError(status: number, message: string): HttpError {
 }
 
 export async function scheduleEmails(request: Request, response: Response) {
+  const userId = request.authenticatedUser!.id;
   const parsedInput = scheduleEmailsSchema.safeParse(request.body);
   if (!parsedInput.success) {
     response.status(400).json({
@@ -29,8 +30,8 @@ export async function scheduleEmails(request: Request, response: Response) {
 
   const input = parsedInput.data;
   const sender = await prisma.sender.findFirst({
-    where: { id: input.senderId, status: SenderStatus.ACTIVE },
-    select: { id: true, userId: true },
+    where: { id: input.senderId, userId, status: SenderStatus.ACTIVE },
+    select: { id: true },
   });
   if (!sender) {
     throw requestError(404, "An active sender with the supplied senderId was not found.");
@@ -47,7 +48,7 @@ export async function scheduleEmails(request: Request, response: Response) {
     transaction.campaign.create({
       data: {
         id: campaignId,
-        userId: sender.userId,
+        userId,
         senderId: sender.id,
         name: input.subject.slice(0, 255),
         status: "SCHEDULED",
@@ -55,7 +56,7 @@ export async function scheduleEmails(request: Request, response: Response) {
         emails: {
           create: emailsToSchedule.map((email) => ({
             id: email.id,
-            userId: sender.userId,
+            userId,
             senderId: sender.id,
             recipientEmail: email.recipientEmail,
             subject: input.subject,
@@ -108,12 +109,12 @@ export async function searchIndexedEmails(request: Request, response: Response) 
     return;
   }
 
-  response.json(await searchEmails(parsedInput.data));
+  response.json(await searchEmails(parsedInput.data, request.authenticatedUser!.id));
 }
 
 export async function getScheduledEmails(request: Request, response: Response) {
   const pagination = paginationSchema.parse(request.query);
-  const where = { status: { in: [EmailStatus.SCHEDULED, EmailStatus.PROCESSING] } };
+  const where = { userId: request.authenticatedUser!.id, status: { in: [EmailStatus.SCHEDULED, EmailStatus.PROCESSING] } };
   const [total, emails] = await prisma.$transaction([
     prisma.email.count({ where }),
     prisma.email.findMany({
@@ -130,7 +131,7 @@ export async function getScheduledEmails(request: Request, response: Response) {
 
 export async function getSentEmails(request: Request, response: Response) {
   const pagination = paginationSchema.parse(request.query);
-  const where = { status: { in: [EmailStatus.SENT, EmailStatus.FAILED] } };
+  const where = { userId: request.authenticatedUser!.id, status: { in: [EmailStatus.SENT, EmailStatus.FAILED] } };
   const [total, emails] = await prisma.$transaction([
     prisma.email.count({ where }),
     prisma.email.findMany({
@@ -143,6 +144,16 @@ export async function getSentEmails(request: Request, response: Response) {
   ]);
 
   response.json({ page: pagination.page, limit: pagination.limit, total, emails });
+}
+
+export async function getEmail(request: Request, response: Response) {
+  const emailId = Array.isArray(request.params.id) ? request.params.id[0] : request.params.id;
+  const email = await prisma.email.findFirst({
+    where: { id: emailId, userId: request.authenticatedUser!.id },
+    select: { ...emailSummarySelection, htmlBody: true, failureReason: true, createdAt: true, updatedAt: true },
+  });
+  if (!email) throw requestError(404, "The email was not found.");
+  response.json({ email });
 }
 
 const emailSummarySelection = {

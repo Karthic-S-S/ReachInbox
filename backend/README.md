@@ -13,6 +13,12 @@ Copy `.env.example` to `.env` before database commands. Configure the root `.env
 
 Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM` with Ethereal SMTP credentials in the local `.env`. Start the API with `npm run dev` and the separate mail worker with `npm run worker`.
 
+## Queue dashboard
+
+Bull Board is available at `http://localhost:3000/admin/queues` and displays the actual BullMQ `emailQueue` using the existing Redis connection (`REDIS_HOST` and `REDIS_PORT`). It exposes waiting, active, delayed, completed, and failed email jobs, including the normal Bull Board views for other supported states.
+
+Set `BULL_BOARD_ENABLED=true` in local development to expose the dashboard; the application defaults it to `false` when the variable is absent. Set it to `false` to intentionally return the normal 404 response for `/admin/queues`. This is an administrative development endpoint and must be protected by application authentication or network access controls before any production exposure. This phase does not add authentication or custom job-management APIs.
+
 `POST /api/emails/schedule` persists a campaign and its emails in MySQL before adding one delayed BullMQ job per email. `GET /api/emails/scheduled` returns scheduled or processing emails, and `GET /api/emails/sent` returns sent or failed emails. The worker conditionally changes only `SCHEDULED` records to `PROCESSING`, so a second worker cannot send the same record after it has been claimed. It sends only after that claim, then records either `SENT` with the provider message ID or `FAILED` with a delivery error.
 
 MySQL and Redis cannot share one transaction. If BullMQ cannot accept the bulk enqueue after MySQL commits, the persisted records are changed to `FAILED` and the API returns an error rather than pretending they were scheduled. A future outbox/reconciliation phase can make that cross-store handoff recoverable. In development, `POST /api/test/queue` remains available for isolated SMTP checks; successful worker logs include the Ethereal preview URL.

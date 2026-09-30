@@ -14,6 +14,7 @@ const environmentSchema = z.object({
   PROCESSING_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(86_400_000).default(300_000),
   MIN_DELAY_BETWEEN_EMAILS_MS: z.coerce.number().int().min(0).max(3_600_000).default(2_000),
   MAX_EMAILS_PER_HOUR: z.coerce.number().int().min(1).max(1_000_000).default(200),
+  BULL_BOARD_ENABLED: z.stringbool().default(false),
   ELASTICSEARCH_URL: z.string().url().default("http://localhost:9200"),
   ELASTICSEARCH_INDEX: z.string().trim().min(1).max(255).regex(/^[a-z0-9][a-z0-9_-]*$/).default("emails"),
   SMTP_HOST: z.string().min(1),

@@ -30,3 +30,9 @@ Scheduled delivery uses deterministic BullMQ job IDs and a database claim to pre
 Before SMTP, every worker makes a shared Redis throttling reservation. `MIN_DELAY_BETWEEN_EMAILS_MS` and `MAX_EMAILS_PER_HOUR` control the global delivery cadence and hourly capacity; a throttled email remains scheduled and its existing BullMQ job is delayed rather than dropped or failed.
 
 MySQL remains the source of truth for scheduling and delivery. Elasticsearch is a rebuildable search index exposed through `GET /api/emails/search`.
+
+## Queue dashboard
+
+With `BULL_BOARD_ENABLED=true`, Bull Board is available at `http://localhost:3000/admin/queues`. The application defaults the route to disabled when the variable is absent, while `backend/.env.example` enables it for local development. It displays the real BullMQ `emailQueue` through the same Redis connection used by the API and worker, including waiting, active, delayed, completed, and failed jobs.
+
+This is an administrative development endpoint. Set `BULL_BOARD_ENABLED=false` to leave the route unavailable, and add application authentication or network controls before exposing it in production. No custom destructive queue APIs are added.

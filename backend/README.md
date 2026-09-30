@@ -1,6 +1,6 @@
 # ReachInbox API
 
-Express, Prisma, BullMQ, and Ethereal SMTP foundation. It exposes health checks, persistent email scheduling, read APIs, and a development-only test queue endpoint.
+Express, Prisma, BullMQ, Ethereal SMTP, and Elasticsearch email search. It exposes health checks, persistent email scheduling, read APIs, search, and a development-only test queue endpoint.
 
 ```sh
 npm install
@@ -9,7 +9,7 @@ npm run prisma:migrate -- --name init
 npm run dev
 ```
 
-Copy `.env.example` to `.env` before database commands. Configure the root `.env` and backend `.env` with matching local credentials, then start MySQL and Redis from the repository root with `docker compose up -d`. Prisma uses the pre-provisioned `reachinbox_shadow` database for development migrations.
+Copy `.env.example` to `.env` before database commands. Configure the root `.env` and backend `.env` with matching local credentials, then start MySQL, Redis, and Elasticsearch from the repository root with `docker compose up -d`. Prisma uses the pre-provisioned `reachinbox_shadow` database for development migrations.
 
 Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM` with Ethereal SMTP credentials in the local `.env`. Start the API with `npm run dev` and the separate mail worker with `npm run worker`.
 
@@ -34,3 +34,13 @@ When capacity is unavailable, the worker does not call SMTP or consume a BullMQ 
 Jobs that become ready together are serialized by the shared minimum-delay reservation. BullMQ and concurrent workers do not promise strict global ordering, but jobs scheduled for the same sender/time normally retain queue order as they contend for the next shared slot. Unrelated senders also share the configured global safety limit in this phase.
 
 For local throttle testing, temporarily start workers with small overrides such as `MIN_DELAY_BETWEEN_EMAILS_MS=2000` and `MAX_EMAILS_PER_HOUR=2`, then schedule three or more simultaneous emails. Two may reserve the current hourly window; remaining records stay `SCHEDULED` with an adjusted `scheduledAt` and delayed BullMQ jobs. Do not commit those temporary values to `.env`.
+
+## Email search
+
+MySQL is authoritative for email scheduling, state transitions, and delivery. Elasticsearch is a rebuildable `ELASTICSEARCH_INDEX` projection, defaulting to `emails`, used only for search. Local Compose runs Elasticsearch 8.19 on the configurable `ELASTICSEARCH_PORT` (default `9200`); the API uses `ELASTICSEARCH_URL` (default `http://localhost:9200`).
+
+On startup, the API creates the index only when absent. The mapping uses `keyword` fields for identifiers and status, `text` plus `keyword` for the recipient, `text` for subject/body, and `date` fields for scheduling and audit timestamps. Existing indexes are never deleted during startup.
+
+`GET /api/emails/search?q=welcome&status=SENT&page=1&limit=20` searches recipient, subject, and body with pagination capped at 100. `senderId` and `campaignId` are optional exact filters. A full email address uses the recipient keyword field for an exact result; regular terms use full-text matching. Responses return normalized email summaries, never raw Elasticsearch documents.
+
+Scheduling indexes persisted records after queueing. Worker state transitions trigger best-effort index refreshes after MySQL is updated. Elasticsearch failures produce structured logs and never change MySQL email state, BullMQ retries, rate limiting, or SMTP delivery. This creates intentional eventual consistency: a document may be stale or absent during an outage. Recover with `npm run search:reindex`, which explicitly recreates the dedicated index from MySQL and reports indexed and failed counts. It is an administrator/development command, not a startup task or background scheduler.

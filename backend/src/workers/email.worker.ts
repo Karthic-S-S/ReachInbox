@@ -22,6 +22,7 @@ import { testEmailJobSchema, type TestEmailJobData } from "../schemas/test-email
 import { sendEmail, type EmailDeliveryResult } from "../services/email.service.js";
 import { reserveEmailSendSlot } from "../services/email-rate-limiter.service.js";
 import { rateLimitRedis } from "../config/rate-limit-redis.js";
+import { closeElasticsearch, syncEmailSearchDocument } from "../services/email-search.service.js";
 
 type ScheduledEmailJobResult = {
   emailId: string;
@@ -60,6 +61,7 @@ async function persistAttemptFailure(emailId: string, attemptsMade: number, atte
       failureReason: sanitizeFailureReason(error),
     },
   });
+  void syncEmailSearchDocument(emailId);
 }
 
 async function restoreThrottledEmail(emailId: string, processingStartedAt: Date, nextEligibleAt: Date) {
@@ -74,6 +76,7 @@ async function restoreThrottledEmail(emailId: string, processingStartedAt: Date,
   if (restored.count !== 1) {
     throw new Error(`Unable to safely reschedule throttled email ${emailId}.`);
   }
+  void syncEmailSearchDocument(emailId);
 }
 
 async function processScheduledEmail(
@@ -99,6 +102,7 @@ async function processScheduledEmail(
   if (claim.count !== 1) {
     return { emailId: email.id, status: "SKIPPED" };
   }
+  void syncEmailSearchDocument(email.id);
 
   try {
     await enqueueProcessingRecovery(email.id, processingStartedAt);
@@ -150,6 +154,7 @@ async function processScheduledEmail(
       failureReason: null,
     },
   });
+  void syncEmailSearchDocument(email.id);
 
   console.info({
     event: "email.scheduled.sent",
@@ -197,6 +202,7 @@ async function processScheduledEmailRecovery(data: ScheduledEmailRecoveryJobData
   if (recovered.count !== 1) {
     return { emailId: email.id, status: "SKIPPED" };
   }
+  void syncEmailSearchDocument(email.id);
 
   if (originalJob) {
     const state = await originalJob.getState();
@@ -263,6 +269,7 @@ async function shutdown(signal: string) {
   await worker.close();
   await emailQueue.close();
   await rateLimitRedis.quit();
+  await closeElasticsearch();
   await prisma.$disconnect();
 }
 

@@ -1,10 +1,14 @@
 import { Router } from "express";
-import { getScheduledEmails, getSentEmails, scheduleEmails } from "../controllers/emails.controller.js";
+import { getScheduledEmails, getSentEmails, scheduleEmails, searchIndexedEmails } from "../controllers/emails.controller.js";
 
 export const emailsRouter = Router();
 
 emailsRouter.post("/emails/schedule", (request, response, next) => {
   void scheduleEmails(request, response).catch(next);
+});
+
+emailsRouter.get("/emails/search", (request, response, next) => {
+  void searchIndexedEmails(request, response).catch(next);
 });
 
 emailsRouter.get("/emails/scheduled", (request, response, next) => {

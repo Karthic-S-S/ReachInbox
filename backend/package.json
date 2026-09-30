@@ -8,11 +8,13 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "worker": "tsx src/workers/email.worker.ts",
+    "search:reindex": "tsx src/scripts/reindex-search.ts",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
   "dependencies": {
+    "@elastic/elasticsearch": "~8.19.2",
     "@prisma/adapter-mariadb": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "bullmq": "^5.66.4",

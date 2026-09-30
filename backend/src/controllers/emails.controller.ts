@@ -4,6 +4,8 @@ import { EmailStatus, SenderStatus } from "../generated/prisma/client.js";
 import { prisma } from "../config/prisma.js";
 import { enqueueScheduledEmails, getScheduledEmailJobId } from "../queues/email.queue.js";
 import { paginationSchema, scheduleEmailsSchema } from "../schemas/schedule-email.schema.js";
+import { searchEmailsSchema } from "../schemas/search-emails.schema.js";
+import { searchEmails, syncEmailSearchDocument } from "../services/email-search.service.js";
 
 type HttpError = Error & { status: number };
 
@@ -80,8 +82,11 @@ export async function scheduleEmails(request: Request, response: Response) {
       where: { id: { in: campaign.emails.map((email) => email.id) }, status: EmailStatus.SCHEDULED },
       data: { status: EmailStatus.FAILED, failureReason: "The email could not be queued for delivery." },
     });
+    await Promise.all(campaign.emails.map((email) => syncEmailSearchDocument(email.id)));
     throw error;
   }
+
+  await Promise.all(campaign.emails.map((email) => syncEmailSearchDocument(email.id)));
 
   response.status(201).json({
     campaignId: campaign.id,
@@ -92,6 +97,18 @@ export async function scheduleEmails(request: Request, response: Response) {
       scheduledAt: email.scheduledAt,
     })),
   });
+}
+
+export async function searchIndexedEmails(request: Request, response: Response) {
+  const parsedInput = searchEmailsSchema.safeParse(request.query);
+  if (!parsedInput.success) {
+    response.status(400).json({
+      error: { code: "VALIDATION_ERROR", message: "The email search query is invalid." },
+    });
+    return;
+  }
+
+  response.json(await searchEmails(parsedInput.data));
 }
 
 export async function getScheduledEmails(request: Request, response: Response) {

@@ -6,6 +6,10 @@ export interface UserAccount {
   email: string;
   avatar: string | null;
 }
+export interface SlackStatus {
+  connected: boolean;
+  workspace?: { id: string; name: string | null };
+}
 export interface MailSummary {
   id: string;
   recipientName: string;
@@ -76,6 +80,9 @@ export const api = {
   googleLoginUrl: () => `${API_BASE_URL}/api/auth/google`,
   currentUser: () => request<{ user: UserAccount }>("/api/auth/me"),
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
+  slackConnectUrl: () => `${API_BASE_URL}/api/slack/connect`,
+  slackStatus: () => request<SlackStatus>("/api/slack/status"),
+  disconnectSlack: () => request<void>("/api/slack/disconnect", { method: "POST" }),
   listMail: (mailbox: MailboxKind, signal?: AbortSignal) =>
     request<MailboxResponse>(`/api/mail?mailbox=${mailbox}`, signal ? { signal } : undefined),
   getMail: (id: string, signal?: AbortSignal) =>

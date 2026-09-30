@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronDown, Clock3, Menu, PenLine, Send } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Button } from "@/components/ui-button";
-import { api, type UserAccount } from "@/lib/api";
+import { api, type SlackStatus, type UserAccount } from "@/lib/api";
 
 export function MailShell({
   children,
@@ -15,15 +15,30 @@ export function MailShell({
 }) {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<UserAccount | null>(null);
+  const [slack, setSlack] = useState<SlackStatus | null>(null);
+  const [slackError, setSlackError] = useState("");
   useEffect(() => {
     void api
       .currentUser()
       .then(({ user: currentUser }) => setUser(currentUser))
       .catch(() => setUser(null));
+    void api
+      .slackStatus()
+      .then(setSlack)
+      .catch(() => setSlack(null));
   }, []);
   async function logout() {
     await api.logout().catch(() => undefined);
     window.location.assign("/login");
+  }
+  async function disconnectSlack() {
+    setSlackError("");
+    try {
+      await api.disconnectSlack();
+      setSlack({ connected: false });
+    } catch (error) {
+      setSlackError(error instanceof Error ? error.message : "Slack could not be disconnected.");
+    }
   }
   return (
     <div className="min-h-screen bg-background text-foreground lg:grid lg:grid-cols-[286px_minmax(0,1fr)]">
@@ -73,6 +88,36 @@ export function MailShell({
         <Button variant="ghost" className="mb-3 w-full" onClick={() => void logout()}>
           Log out
         </Button>
+        {slack?.connected ? (
+          <div className="mb-3 rounded-md bg-muted px-3 py-2 text-sm">
+            <p className="font-medium">Slack connected</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {slack.workspace?.name ?? "Workspace"}
+            </p>
+            <Button
+              variant="ghost"
+              className="mt-1 h-auto w-full py-1 text-xs"
+              onClick={() => void disconnectSlack()}
+            >
+              Disconnect
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="ghost"
+            className="mb-3 w-full"
+            onClick={() => {
+              window.location.href = api.slackConnectUrl();
+            }}
+          >
+            Connect Slack
+          </Button>
+        )}
+        {slackError && (
+          <p role="alert" className="mb-3 px-3 text-xs text-destructive">
+            {slackError}
+          </p>
+        )}
         <Button variant="outline" className="mb-7 w-full" onClick={() => setOpen(false)}>
           <Link to="/compose" className="flex w-full items-center justify-center gap-2">
             <PenLine className="size-4 lg:hidden" />

@@ -23,6 +23,7 @@ import { sendEmail, type EmailDeliveryResult } from "../services/email.service.j
 import { reserveEmailSendSlot } from "../services/email-rate-limiter.service.js";
 import { rateLimitRedis } from "../config/rate-limit-redis.js";
 import { closeElasticsearch, syncEmailSearchDocument } from "../services/email-search.service.js";
+import { notifyRateLimitHit } from "../services/slack.service.js";
 
 type ScheduledEmailJobResult = {
   emailId: string;
@@ -121,6 +122,14 @@ async function processScheduledEmail(
 
   if (!rateLimitDecision.allowed) {
     await restoreThrottledEmail(email.id, processingStartedAt, rateLimitDecision.nextEligibleAt);
+    if (rateLimitDecision.reason === "HOURLY_LIMIT") {
+      await notifyRateLimitHit({
+        userId: email.userId,
+        senderId: email.senderId,
+        hourlyLimit: env.MAX_EMAILS_PER_HOUR,
+        nextEligibleAt: rateLimitDecision.nextEligibleAt,
+      });
+    }
     await job.moveToDelayed(rateLimitDecision.nextEligibleAt.getTime(), job.token);
     console.info({
       event: "email.rate_limited",

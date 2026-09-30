@@ -29,6 +29,10 @@ const environmentSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   GOOGLE_CALLBACK_URL: z.string().url().optional(),
+  SLACK_CLIENT_ID: z.string().min(1).optional(),
+  SLACK_CLIENT_SECRET: z.string().min(1).optional(),
+  SLACK_REDIRECT_URI: z.string().url().optional(),
+  SLACK_TOKEN_ENCRYPTION_KEY: z.string().min(32).optional(),
 }).superRefine((value, context) => {
   if (!value.AUTH_ENABLED) return;
   for (const key of ["AUTH_SESSION_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_CALLBACK_URL"] as const) {

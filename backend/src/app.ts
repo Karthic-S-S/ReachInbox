@@ -6,6 +6,7 @@ import { authRouter } from "./routes/auth.routes.js";
 import { emailsRouter } from "./routes/emails.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { healthRouter } from "./routes/health.routes.js";
+import { slackRouter } from "./routes/slack.routes.js";
 import { testRouter } from "./routes/test.routes.js";
 
 export const app = express();
@@ -14,6 +15,7 @@ app.use(cors({ origin: env.FRONTEND_URL, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 app.use("/api", healthRouter);
 if (env.AUTH_ENABLED) app.use("/api", authRouter);
+if (env.AUTH_ENABLED) app.use("/api", slackRouter);
 app.use("/api", emailsRouter);
 app.use("/api/test", testRouter);
 

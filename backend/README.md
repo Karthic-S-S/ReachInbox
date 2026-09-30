@@ -24,3 +24,13 @@ Each scheduled email uses the deterministic BullMQ job ID `email-<emailId>`; Bul
 Every claim also creates a delayed BullMQ recovery check. Once `PROCESSING_TIMEOUT_MS` has elapsed, the check returns an abandoned, non-active claim to `SCHEDULED` and re-enqueues its deterministic delivery job. It never resets a job that BullMQ still reports as active; instead it queues a uniquely identified next recovery check for the same lease, avoiding a race with an active worker while retaining crash recovery. This does not use cron or in-memory timers.
 
 Database claims and deterministic jobs prevent duplicate processing when the database state is known, but ordinary SMTP has no atomic transaction with MySQL. If SMTP accepts a message and the worker crashes before writing `SENT`, recovery can eventually retry and a duplicate may be delivered. A true exactly-once guarantee requires provider-side idempotency or a transactional delivery mechanism.
+
+## Shared throttling
+
+`MIN_DELAY_BETWEEN_EMAILS_MS` defaults to `2000`, and `MAX_EMAILS_PER_HOUR` defaults to `200`. Before SMTP, every worker uses one Redis Lua script to atomically check the fixed hourly window and the last reserved send timestamp, then reserve capacity only when both permit it. The Redis keys are shared by all workers and instances, so concurrent workers cannot independently exceed the configured capacity.
+
+When capacity is unavailable, the worker does not call SMTP or consume a BullMQ retry attempt. It conditionally restores its database claim from `PROCESSING` to `SCHEDULED`, updates `scheduledAt` to the next eligible timestamp, and moves the same deterministic BullMQ job back to delayed. This preserves the record and keeps it retryable. SMTP failures remain Phase 5 failures and use the normal retry policy; the rate-limit reservation is intentionally not released after an SMTP error because transport errors can be ambiguous about whether the provider accepted the message.
+
+Jobs that become ready together are serialized by the shared minimum-delay reservation. BullMQ and concurrent workers do not promise strict global ordering, but jobs scheduled for the same sender/time normally retain queue order as they contend for the next shared slot. Unrelated senders also share the configured global safety limit in this phase.
+
+For local throttle testing, temporarily start workers with small overrides such as `MIN_DELAY_BETWEEN_EMAILS_MS=2000` and `MAX_EMAILS_PER_HOUR=2`, then schedule three or more simultaneous emails. Two may reserve the current hourly window; remaining records stay `SCHEDULED` with an adjusted `scheduledAt` and delayed BullMQ jobs. Do not commit those temporary values to `.env`.

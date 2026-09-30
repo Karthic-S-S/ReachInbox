@@ -12,6 +12,8 @@ const environmentSchema = z.object({
   EMAIL_JOB_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
   EMAIL_JOB_BACKOFF_MS: z.coerce.number().int().min(0).max(3_600_000).default(5_000),
   PROCESSING_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(86_400_000).default(300_000),
+  MIN_DELAY_BETWEEN_EMAILS_MS: z.coerce.number().int().min(0).max(3_600_000).default(2_000),
+  MAX_EMAILS_PER_HOUR: z.coerce.number().int().min(1).max(1_000_000).default(200),
   SMTP_HOST: z.string().min(1),
   SMTP_PORT: z.coerce.number().int().min(1).max(65535),
   SMTP_USER: z.string().min(1),

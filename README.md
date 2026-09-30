@@ -1,6 +1,6 @@
 # ReachInbox Email Scheduler
 
-Phase 1-5 foundation for the ReachInbox email-scheduling assignment.
+Phase 1-6 foundation for the ReachInbox email-scheduling assignment.
 
 ## Structure
 
@@ -26,3 +26,5 @@ For Prisma development migrations, MySQL also provisions a dedicated `reachinbox
 Redis is available on the port configured by `REDIS_PORT`. Start the BullMQ worker separately with `npm run worker` from `backend/`. Configure the `SMTP_*` variables in `backend/.env` with local Ethereal credentials. The persistent scheduling endpoint is `POST /api/emails/schedule`; development-only SMTP checks remain available at `POST /api/test/queue`.
 
 Scheduled delivery uses deterministic BullMQ job IDs and a database claim to prevent obvious duplicate sends. This is not an exactly-once SMTP guarantee: a worker can still crash after SMTP accepts a message but before MySQL records it as sent.
+
+Before SMTP, every worker makes a shared Redis throttling reservation. `MIN_DELAY_BETWEEN_EMAILS_MS` and `MAX_EMAILS_PER_HOUR` control the global delivery cadence and hourly capacity; a throttled email remains scheduled and its existing BullMQ job is delayed rather than dropped or failed.

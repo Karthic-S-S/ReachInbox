@@ -1,4 +1,4 @@
-import { Worker } from "bullmq";
+import { DelayedError, Job, Worker } from "bullmq";
 import { EmailStatus } from "../generated/prisma/client.js";
 import { env } from "../config/env.js";
 import { prisma } from "../config/prisma.js";
@@ -20,10 +20,12 @@ import {
 } from "../schemas/scheduled-email-recovery-job.schema.js";
 import { testEmailJobSchema, type TestEmailJobData } from "../schemas/test-email-job.schema.js";
 import { sendEmail, type EmailDeliveryResult } from "../services/email.service.js";
+import { reserveEmailSendSlot } from "../services/email-rate-limiter.service.js";
+import { rateLimitRedis } from "../config/rate-limit-redis.js";
 
 type ScheduledEmailJobResult = {
   emailId: string;
-  status: "SENT" | "SKIPPED" | "RECOVERED" | "ACTIVE";
+  status: "SENT" | "SKIPPED" | "RECOVERED" | "ACTIVE" | "THROTTLED";
   messageId?: string;
   previewUrl?: string;
 };
@@ -60,7 +62,22 @@ async function persistAttemptFailure(emailId: string, attemptsMade: number, atte
   });
 }
 
+async function restoreThrottledEmail(emailId: string, processingStartedAt: Date, nextEligibleAt: Date) {
+  const restored = await prisma.email.updateMany({
+    where: { id: emailId, status: EmailStatus.PROCESSING, processingStartedAt },
+    data: {
+      status: EmailStatus.SCHEDULED,
+      scheduledAt: nextEligibleAt,
+      processingStartedAt: null,
+    },
+  });
+  if (restored.count !== 1) {
+    throw new Error(`Unable to safely reschedule throttled email ${emailId}.`);
+  }
+}
+
 async function processScheduledEmail(
+  job: Job<EmailQueueJobData, EmailJobResult>,
   data: ScheduledEmailJobData,
   attemptsMade: number,
   attempts: number,
@@ -90,6 +107,27 @@ async function processScheduledEmail(
     throw error;
   }
 
+  let rateLimitDecision;
+  try {
+    rateLimitDecision = await reserveEmailSendSlot();
+  } catch (error) {
+    await persistAttemptFailure(email.id, attemptsMade, attempts, error);
+    throw error;
+  }
+
+  if (!rateLimitDecision.allowed) {
+    await restoreThrottledEmail(email.id, processingStartedAt, rateLimitDecision.nextEligibleAt);
+    await job.moveToDelayed(rateLimitDecision.nextEligibleAt.getTime(), job.token);
+    console.info({
+      event: "email.rate_limited",
+      emailId: email.id,
+      reason: rateLimitDecision.reason,
+      nextEligibleAt: rateLimitDecision.nextEligibleAt.toISOString(),
+    });
+    throw new DelayedError();
+  }
+
+  const sendStartedAt = new Date();
   let delivery: EmailDeliveryResult;
   try {
     delivery = await sendEmail({
@@ -116,6 +154,7 @@ async function processScheduledEmail(
   console.info({
     event: "email.scheduled.sent",
     emailId: email.id,
+    sendStartedAt: sendStartedAt.toISOString(),
     messageId: delivery.messageId,
     previewUrl: delivery.previewUrl,
   });
@@ -181,7 +220,7 @@ const worker = new Worker<EmailQueueJobData, EmailJobResult>(
     if (job.name === SCHEDULED_EMAIL_JOB_NAME) {
       const result = scheduledEmailJobSchema.safeParse(job.data);
       if (!result.success) throw new Error("The queued scheduled email payload is invalid.");
-      return processScheduledEmail(result.data, job.attemptsMade, job.opts.attempts ?? 1);
+      return processScheduledEmail(job, result.data, job.attemptsMade, job.opts.attempts ?? 1);
     }
 
     if (job.name === SCHEDULED_EMAIL_RECOVERY_JOB_NAME) {
@@ -223,6 +262,7 @@ async function shutdown(signal: string) {
   console.info({ event: "worker.shutdown", signal });
   await worker.close();
   await emailQueue.close();
+  await rateLimitRedis.quit();
   await prisma.$disconnect();
 }
 
